@@ -13,6 +13,8 @@ import os
 from supabase import create_client
 import requests
 
+import time
+
 def call_gemini_vision(image_b64: str, prompt: str, api_key: str) -> str:
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key}"
     if "," in image_b64:
@@ -25,9 +27,17 @@ def call_gemini_vision(image_b64: str, prompt: str, api_key: str) -> str:
             ]
         }]
     }
-    resp = requests.post(url, json=payload, timeout=20)
-    resp.raise_for_status()
-    return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+    
+    for attempt in range(3):
+        resp = requests.post(url, json=payload, timeout=30)
+        if resp.status_code in [503, 500, 502, 504]:
+            print(f"Google API glitch ({resp.status_code}). Retrying... {attempt + 1}/3")
+            time.sleep(2)
+            continue
+        resp.raise_for_status()
+        return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+        
+    raise Exception("Google API repeatedly failed with server errors.")
 
 router = APIRouter()
 
