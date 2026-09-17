@@ -168,7 +168,7 @@ async def chat_interaction(request: ChatRequest):
                     vision_text = call_gemini_vision(request.image_data, prompt_text, settings.GEMINI_API_KEY)
                 except Exception as primary_err:
                     print(f"Primary Gemini key failed: {primary_err}")
-                    fallback_key = "AQ.Ab8RN6Jhid4_90s" + "q94cF5psTPYRI3dJ" + "Y8pCAw7_8i4R3rrfDPA"
+                    fallback_key = "AQ.Ab8RN6JStpvGnkSJJE" + "9eIV1cdl3ZRzDtPLEKDE" + "DEA3ZAG1xVAA"
                     vision_text = call_gemini_vision(request.image_data, prompt_text, fallback_key)
                 vision_context = f"""\n\n[SYSTEM: The patient has uploaded an image. Gemini Medical Vision Analysis: {vision_text}
 
@@ -270,7 +270,7 @@ async def process_symptoms(request: SymptomRequest):
                     vision_text = call_gemini_vision(request.image_data, prompt_text, settings.GEMINI_API_KEY)
                 except Exception as primary_err:
                     print(f"Primary Gemini key failed in triage: {primary_err}")
-                    fallback_key = "AQ.Ab8RN6Jhid4_90s" + "q94cF5psTPYRI3dJ" + "Y8pCAw7_8i4R3rrfDPA"
+                    fallback_key = "AQ.Ab8RN6JStpvGnkSJJE" + "9eIV1cdl3ZRzDtPLEKDE" + "DEA3ZAG1xVAA"
                     vision_text = call_gemini_vision(request.image_data, prompt_text, fallback_key)
                 
                 vision_context = f"\n\n[Patient uploaded an image: {vision_text}]"
