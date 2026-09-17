@@ -185,6 +185,37 @@ export default function SymptomChecker() {
     }
   }, [messages, isSpeakingEnabled]);
 
+  // Call Gemini Vision directly from the browser (bypasses Render network restrictions)
+  const analyzeImageWithGemini = async (base64: string): Promise<string> => {
+    const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || '';
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`;
+    
+    // Strip data URL prefix if present
+    const cleanBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
+    
+    const payload = {
+      contents: [{
+        parts: [
+          { text: "You are a medical image analyst. Carefully describe what you see in this image in clinical terms. Note any visible symptoms, skin conditions, wounds, rashes, or abnormalities. If the image is completely unrelated to medicine or health (e.g., a car, scenery, animal), explicitly state: 'This image appears to be unrelated to health or medicine. It shows [description].'" },
+          { inline_data: { mime_type: "image/jpeg", data: cleanBase64 } }
+        ]
+      }]
+    };
+    
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!resp.ok) {
+      throw new Error(`Gemini API error: ${resp.status}`);
+    }
+    
+    const data = await resp.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  };
+
   const handleSend = async () => {
     if (!input.trim() && !attachedImage) return;
 
@@ -204,6 +235,24 @@ export default function SymptomChecker() {
     setIsTyping(true);
 
     try {
+      // ─── BROWSER-SIDE GEMINI VISION ─────────────────────────────────────────
+      // Call Gemini directly from browser to bypass Render network restrictions.
+      // We convert the image to a text description and send ONLY TEXT to backend.
+      if (imageBase64) {
+        try {
+          const visionDescription = await analyzeImageWithGemini(imageBase64);
+          if (visionDescription) {
+            // Prepend the vision analysis to the user's message as context
+            messageText = `${userMessage}\n\n[VISION ANALYSIS]: ${visionDescription}`;
+          }
+        } catch (visionErr) {
+          console.warn('Browser Gemini vision failed, sending without image analysis:', visionErr);
+        }
+        // Do NOT send raw base64 to backend — it's already been analyzed above
+        imageBase64 = null;
+      }
+      // ────────────────────────────────────────────────────────────────────────
+
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
       let sessionIdToUse = currentSessionId;
       
@@ -248,6 +297,7 @@ export default function SymptomChecker() {
         sender: 'ai', 
         text: "I'm having trouble connecting right now, but I have noted your symptoms. You can click 'Generate Triage Report' when you are ready."
       }]);
+
     } finally {
       setIsTyping(false);
     }
