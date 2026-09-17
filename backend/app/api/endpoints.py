@@ -14,7 +14,7 @@ from supabase import create_client
 import requests
 
 def call_gemini_vision(image_b64: str, prompt: str, api_key: str) -> str:
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key}"
     if "," in image_b64:
         image_b64 = image_b64.split(",")[1]
     payload = {
