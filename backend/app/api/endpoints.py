@@ -15,29 +15,48 @@ import requests
 
 import time
 
-def call_gemini_vision(image_b64: str, prompt: str, api_key: str) -> str:
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={api_key}"
+def call_nvidia_vision(image_b64: str, prompt: str, api_key: str) -> str:
+    url = "https://integrate.api.nvidia.com/v1/chat/completions"
     if "," in image_b64:
         image_b64 = image_b64.split(",")[1]
+    
+    headers = {
+        'Authorization': f'Bearer {api_key}',
+        'Accept': 'application/json',
+    }
+    
     payload = {
-        "contents": [{
-            "parts": [
-                {"text": prompt},
-                {"inline_data": {"mime_type": "image/jpeg", "data": image_b64}}
-            ]
-        }]
+      'messages': [
+        {
+          'content': [
+            {
+              'type': 'text',
+              'text': prompt
+            },
+            {
+              'type': 'image_url',
+              'image_url': {
+                'url': f'data:image/jpeg;base64,{image_b64}'
+              }
+            }
+          ],
+          'role': 'user'
+        }
+      ],
+      'model': 'meta/llama-3.2-11b-vision-instruct',
+      'max_tokens': 512
     }
     
     for attempt in range(3):
-        resp = requests.post(url, json=payload, timeout=30)
+        resp = requests.post(url, headers=headers, json=payload, timeout=30)
         if resp.status_code in [503, 500, 502, 504]:
-            print(f"Google API glitch ({resp.status_code}). Retrying... {attempt + 1}/3")
+            print(f"NVIDIA API glitch ({resp.status_code}). Retrying... {attempt + 1}/3")
             time.sleep(2)
             continue
         resp.raise_for_status()
-        return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+        return resp.json()["choices"][0]["message"]["content"]
         
-    raise Exception("Google API repeatedly failed with server errors.")
+    raise Exception("NVIDIA API repeatedly failed with server errors.")
 
 router = APIRouter()
 
@@ -165,12 +184,12 @@ async def chat_interaction(request: ChatRequest):
             try:
                 prompt_text = "You are a medical image analyst. Carefully describe what you see in this image in clinical terms. Note any visible symptoms, skin conditions, wounds, rashes, or abnormalities. If the image is completely unrelated to medicine or health (e.g., a car, scenery, animal), explicitly state: 'This image appears to be unrelated to health or medicine. It shows [description].'"
                 try:
-                    vision_text = call_gemini_vision(request.image_data, prompt_text, settings.GEMINI_API_KEY)
+                    vision_text = call_nvidia_vision(request.image_data, prompt_text, "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")
                 except Exception as primary_err:
-                    print(f"Primary Gemini key failed: {primary_err}")
-                    fallback_key = "AQ.Ab8RN6JStpvGnkSJJE" + "9eIV1cdl3ZRzDtPLEKDE" + "DEA3ZAG1xVAA"
-                    vision_text = call_gemini_vision(request.image_data, prompt_text, fallback_key)
-                vision_context = f"""\n\n[SYSTEM: The patient has uploaded an image. Gemini Medical Vision Analysis: {vision_text}
+                    print(f"Primary NVIDIA key failed: {primary_err}")
+                    # No fallback key needed if the primary one is robust, but keeping the block structure
+                    vision_text = call_nvidia_vision(request.image_data, prompt_text, "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")
+                vision_context = f"""\n\n[SYSTEM: The patient has uploaded an image. Medical Vision Analysis: {vision_text}
 
 YOUR MANDATORY RESPONSE FORMAT FOR THIS MESSAGE:
 1. Start with 1-2 sentences telling the patient what you detected from their image (symptoms, condition, injury, etc.)
@@ -267,13 +286,11 @@ async def process_symptoms(request: SymptomRequest):
             try:
                 prompt_text = "Describe this medical image for clinical triage."
                 try:
-                    vision_text = call_gemini_vision(request.image_data, prompt_text, settings.GEMINI_API_KEY)
+                    vision_text = call_nvidia_vision(request.image_data, prompt_text, "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")
                 except Exception as primary_err:
-                    print(f"Primary Gemini key failed in triage: {primary_err}")
-                    fallback_key = "AQ.Ab8RN6JStpvGnkSJJE" + "9eIV1cdl3ZRzDtPLEKDE" + "DEA3ZAG1xVAA"
-                    vision_text = call_gemini_vision(request.image_data, prompt_text, fallback_key)
-                
-                vision_context = f"\n\n[Patient uploaded an image: {vision_text}]"
+                    print(f"Primary NVIDIA key failed: {primary_err}")
+                    vision_text = call_nvidia_vision(request.image_data, prompt_text, "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")
+                vision_context = f"""\n\n[SYSTEM: The patient has uploaded an image. Medical Vision Analysis: {vision_text}]"""
             except Exception as e:
                 print(f"Gemini vision failed entirely in triage: {e}")
                 
