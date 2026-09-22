@@ -197,7 +197,7 @@ export default function SymptomChecker() {
     const imageUrl = `data:image/jpeg;base64,${cleanBase64}`;
     
     const payload = {
-      model: 'meta/llama-3.2-90b-vision-instruct',
+      model: 'meta/llama-3.2-11b-vision-instruct',
       messages: [
         {
           role: 'user',
