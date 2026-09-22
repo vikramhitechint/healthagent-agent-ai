@@ -244,12 +244,13 @@ export default function SymptomChecker() {
           if (visionDescription) {
             // Prepend the vision analysis to the user's message as context
             messageText = `${userMessage}\n\n[VISION ANALYSIS]: ${visionDescription}`;
+            // Successfully analyzed in browser, no need to send huge base64 to backend
+            imageBase64 = null;
           }
         } catch (visionErr) {
-          console.warn('Browser Gemini vision failed, sending without image analysis:', visionErr);
+          console.warn('Browser Gemini vision failed (likely missing VITE_GEMINI_API_KEY), falling back to backend server analysis.', visionErr);
+          // Keep imageBase64 intact so the backend can process it using its own API keys
         }
-        // Do NOT send raw base64 to backend — it's already been analyzed above
-        imageBase64 = null;
       }
       // ────────────────────────────────────────────────────────────────────────
 
