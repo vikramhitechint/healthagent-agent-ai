@@ -249,8 +249,17 @@ export default function SymptomChecker() {
             // Successfully analyzed in browser, no need to send huge base64 to backend
             imageBase64 = null;
           }
-        } catch (visionErr) {
-          console.warn('Browser Gemini vision failed (likely missing VITE_GEMINI_API_KEY), falling back to backend server analysis.', visionErr);
+        } catch (visionErr: any) {
+          if (visionErr.message && visionErr.message.includes('429')) {
+             setMessages(prev => [...prev, { 
+               id: Date.now().toString(), 
+               sender: 'ai', 
+               text: "⚠️ Google Gemini Free Tier Quota Exceeded (20 images/day limit reached). Your quota will reset at midnight, or you can use a new API key for tomorrow's presentation."
+             }]);
+             setIsTyping(false);
+             return;
+          }
+          console.warn('Browser Gemini vision failed, falling back to backend server analysis.', visionErr);
           // Keep imageBase64 intact so the backend can process it using its own API keys
         }
       }
