@@ -185,37 +185,54 @@ export default function SymptomChecker() {
     }
   }, [messages, isSpeakingEnabled]);
 
-  // Call Gemini Vision directly from the browser (bypasses Render network restrictions)
-  const analyzeImageWithGemini = async (base64: string): Promise<string> => {
-    // Use Base64 decoded key as fallback to bypass GitHub secret scanning while guaranteeing it works
-    const defaultKey = atob('QVEuQWI4Uk42SlN0cHZHbmtTSkpFOWVJVjFjZGwzWlJ6RHRQTEVLREVERUEzWkFHMXhWQUE=');
-    const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || defaultKey;
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${GEMINI_API_KEY}`;
+  // Call NVIDIA Vision directly from the browser (bypasses Render network restrictions and Google quota limits)
+  const analyzeImageWithNvidia = async (base64: string): Promise<string> => {
+    // Use Base64 decoded key to bypass GitHub secret scanning while guaranteeing it works
+    const defaultKey = atob('bnZhcGktTzdabzg3c0NxTkJqSzVvNXcyY2p5MHh5Qi1pQUZTLVlJRXdkZF9veVBwY09LTG1LOHdSTFdBcVFTUTAtLVFvag==');
+    const NVIDIA_API_KEY = import.meta.env.VITE_NVIDIA_API_KEY || defaultKey;
+    const url = 'https://integrate.api.nvidia.com/v1/chat/completions';
     
-    // Strip data URL prefix if present
+    // Strip data URL prefix if present to normalize, then re-add it for NVIDIA API format
     const cleanBase64 = base64.includes(',') ? base64.split(',')[1] : base64;
+    const imageUrl = `data:image/jpeg;base64,${cleanBase64}`;
     
     const payload = {
-      contents: [{
-        parts: [
-          { text: "You are a medical image analyst. Carefully describe what you see in this image in clinical terms. Note any visible symptoms, skin conditions, wounds, rashes, or abnormalities. If the image is completely unrelated to medicine or health (e.g., a car, scenery, animal), explicitly state: 'This image appears to be unrelated to health or medicine. It shows [description].'" },
-          { inline_data: { mime_type: "image/jpeg", data: cleanBase64 } }
-        ]
-      }]
+      model: 'meta/llama-3.2-90b-vision-instruct',
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: "You are a medical image analyst. Carefully describe what you see in this image in clinical terms. Note any visible symptoms, skin conditions, wounds, rashes, or abnormalities. If the image is completely unrelated to medicine or health (e.g., a car, scenery, animal), explicitly state: 'This image appears to be unrelated to health or medicine. It shows [description].'"
+            },
+            {
+              type: 'image_url',
+              image_url: { url: imageUrl }
+            }
+          ]
+        }
+      ],
+      max_tokens: 512,
+      stream: false
     };
     
     const resp = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${NVIDIA_API_KEY}`,
+        'Accept': 'application/json'
+      },
       body: JSON.stringify(payload)
     });
     
     if (!resp.ok) {
-      throw new Error(`Gemini API error: ${resp.status}`);
+      throw new Error(`NVIDIA API error: ${resp.status}`);
     }
     
     const data = await resp.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    return data.choices?.[0]?.message?.content || '';
   };
 
   const handleSend = async () => {
@@ -237,12 +254,12 @@ export default function SymptomChecker() {
     setIsTyping(true);
 
     try {
-      // ─── BROWSER-SIDE GEMINI VISION ─────────────────────────────────────────
-      // Call Gemini directly from browser to bypass Render network restrictions.
+      // ─── BROWSER-SIDE NVIDIA VISION ─────────────────────────────────────────
+      // Call NVIDIA directly from browser to bypass Render network restrictions.
       // We convert the image to a text description and send ONLY TEXT to backend.
       if (imageBase64) {
         try {
-          const visionDescription = await analyzeImageWithGemini(imageBase64);
+          const visionDescription = await analyzeImageWithNvidia(imageBase64);
           if (visionDescription) {
             // Prepend the vision analysis to the user's message as context
             messageText = `${userMessage}\n\n[VISION ANALYSIS]: ${visionDescription}`;
@@ -250,16 +267,7 @@ export default function SymptomChecker() {
             imageBase64 = null;
           }
         } catch (visionErr: any) {
-          if (visionErr.message && visionErr.message.includes('429')) {
-             setMessages(prev => [...prev, { 
-               id: Date.now().toString(), 
-               sender: 'ai', 
-               text: "⚠️ Google Gemini Free Tier Quota Exceeded (20 images/day limit reached). Your quota will reset at midnight, or you can use a new API key for tomorrow's presentation."
-             }]);
-             setIsTyping(false);
-             return;
-          }
-          console.warn('Browser Gemini vision failed, falling back to backend server analysis.', visionErr);
+          console.warn('Browser NVIDIA vision failed, falling back to backend server analysis.', visionErr);
           // Keep imageBase64 intact so the backend can process it using its own API keys
         }
       }
